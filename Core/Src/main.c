@@ -33,13 +33,13 @@
 /* USER CODE BEGIN PD */
 // PID Constants (Tune as needed)
 #define Kp  50.0  // Proportional Gain
-#define Ki  0.1   // Integral Gain
-#define Kd  0.001   // Derivative Gain
+#define Ki  0.0001   // Integral Gain
+#define Kd  0.1   // Derivative Gain
 
 // PWM Limits
 #define PWM_MIN 0
 #define PWM_MAX 2000
-#define MAX_INTEGRAL 200
+#define MAX_INTEGRAL 1000
 
 // Target Output Voltage
 #define VOUT_TARGET 96.0
@@ -133,11 +133,11 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-	  measured_voltage += 5.0;
+	  //measured_voltage += 1.0;
       pwm_value = pid_controller(measured_voltage);
       output_voltage = calculate_output_voltage(pwm_value);
 
-      HAL_Delay(2000);  // 5-second delay
+      //HAL_Delay(50);  // 5-second delay
 
        // Increment voltage
 
@@ -219,12 +219,13 @@ static void MX_GPIO_Init(void)
 // PID function to calculate PWM duty cycle (0 to 2000)
 int pid_controller(double measured_voltage) {
     error = VOUT_TARGET - measured_voltage;
-    integral += error * 0.5;
-    derivative =( error - prev_error)/0.5;
+    //integral += error * 0.5;
+    //derivative =( error - prev_error)/0.5;
     prev_error = error;
-    if (integral > MAX_INTEGRAL) integral = MAX_INTEGRAL;
     if (integral < -MAX_INTEGRAL) integral = -MAX_INTEGRAL;
     // PID Output
+    integral = 0;
+    derivative = 0;
     pid_output = (Kp * error) + (Ki * integral) + (Kd * derivative);
 
     // Convert PID output to PWM range (0-2000)
