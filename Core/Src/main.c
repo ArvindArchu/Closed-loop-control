@@ -32,17 +32,18 @@
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 // PID Constants (Tune as needed)
-#define Kp  50.0  // Proportional Gain
-#define Ki  0.0001   // Integral Gain
-#define Kd  0.1   // Derivative Gain
+#define Kp  2.5 // Proportional Gain
+#define Ki  0.5   // Integral Gain
+#define Kd  1   // Derivative Gain
 
 // PWM Limits
 #define PWM_MIN 0
 #define PWM_MAX 2000
-#define MAX_INTEGRAL 1000
-
+#define MAX_INTEGRAL 1500
+#define PWM_STEP_LIMIT 100
 // Target Output Voltage
 #define VOUT_TARGET 96.0
+#define VIN 10.0
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -56,14 +57,16 @@ COM_InitTypeDef BspCOMInit;
 
 /* USER CODE BEGIN PV */
 // PID Variables
+//double Ki = 0.5;
 double prev_error = 0;
 double error = 0;
 double integral = 0;
 double derivative = 0;
 double output_voltage = 0;
 double pid_output = 0;
-int pwm_value = 0;
-volatile double measured_voltage = 70.0;
+int pwm_value = 1000;
+volatile double measured_voltage = 0;
+uint32_t prev_time = 0;  // Stores the last time PID ran
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -136,14 +139,7 @@ int main(void)
 	  //measured_voltage += 1.0;
       pwm_value = pid_controller(measured_voltage);
       output_voltage = calculate_output_voltage(pwm_value);
-
-      //HAL_Delay(50);  // 5-second delay
-
-       // Increment voltage
-
-      if (measured_voltage > 110.0) {
-          measured_voltage = 70.0; // Reset back to 70V
-      }
+      measured_voltage = output_voltage;
 
   }
   /* USER CODE END 3 */
@@ -218,22 +214,43 @@ static void MX_GPIO_Init(void)
 /* USER CODE BEGIN 4 */
 // PID function to calculate PWM duty cycle (0 to 2000)
 int pid_controller(double measured_voltage) {
+	uint32_t current_time = HAL_GetTick();  // Get current time in milliseconds
+	double dt = (current_time - prev_time) / 1000.0;  // Convert to seconds
+	if (dt <= 0) dt = 0.001;  // Avoid division by zero
+/*
+	if (fabs(error) > 5) {
+	    Ki = 0.5;  // Less integral action for large errors
+	} else {
+	    Ki = 0.02;   // Normal integral action for small errors
+	}
+*/
     error = VOUT_TARGET - measured_voltage;
-    //integral += error * 0.5;
-    //derivative =( error - prev_error)/0.5;
-    prev_error = error;
+    //Integral anti-windup at edge cases
+    if (pwm_value != PWM_MAX && pwm_value != PWM_MIN) {
+        integral += error * dt;
+    }
+    if (integral > MAX_INTEGRAL) integral = MAX_INTEGRAL;
     if (integral < -MAX_INTEGRAL) integral = -MAX_INTEGRAL;
+    derivative =( error - prev_error)/dt;
+    prev_error = error;
     // PID Output
-    integral = 0;
-    derivative = 0;
     pid_output = (Kp * error) + (Ki * integral) + (Kd * derivative);
 
     // Convert PID output to PWM range (0-2000)
-    if(pid_output>0)pwm_value = (int)pid_output;
-    else pwm_value = -(int)pid_output;
-    if (pwm_value < PWM_MIN) pwm_value = PWM_MIN;
-    if (pwm_value > PWM_MAX) pwm_value = PWM_MAX;
+    int base_pwm = 1000;
+    int new_pwm = base_pwm + (int)(pid_output);
 
+    // Constrain how fast PWM can change
+    if (new_pwm > pwm_value + PWM_STEP_LIMIT) {
+        new_pwm = pwm_value + PWM_STEP_LIMIT;
+    } else if (new_pwm < pwm_value - PWM_STEP_LIMIT) {
+        new_pwm = pwm_value - PWM_STEP_LIMIT;
+    }
+    // Apply limits
+    if (new_pwm < PWM_MIN) new_pwm = PWM_MIN;
+    if (new_pwm > PWM_MAX) new_pwm = PWM_MAX;
+
+    pwm_value = new_pwm;
     return pwm_value;
 }
 // Function to calculate expected output voltage using the converter gain
@@ -241,7 +258,7 @@ double calculate_output_voltage(double pwm_value) {
     double D = pwm_value / 2000.0;  // Convert PWM (0-2000) to duty cycle (0-1.0)
     if (D >= 1.0) D = 0.99;
     double gain = 2.0 / (1.0 - D);  // Boost converter gain equation
-    return 24.0 * gain;             // Assume fixed input voltage = 24V
+    return VIN * gain;             // Assume fixed input voltage = 24V
 }
 
 /* USER CODE END 4 */
