@@ -1,6 +1,0 @@
-../Core/Src/main.c:92:5:main	2
-../Core/Src/main.c:160:6:SystemClock_Config	3
-../Core/Src/main.c:207:13:MX_GPIO_Init	1
-../Core/Src/main.c:224:5:pid_controller	10
-../Core/Src/main.c:265:8:calculate_output_voltage	2
-../Core/Src/main.c:278:6:Error_Handler	1
