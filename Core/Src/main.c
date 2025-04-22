@@ -32,19 +32,23 @@
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 // PID Constants (Tune as needed)
-#define Kp  2.5 // Proportional Gain
-#define Ki  0.5   // Integral Gain
+#define Kp  5 // Proportional Gain
+#define Ki  0   // Integral Gain
 #define Kd  1   // Derivative Gain
 //PA8 PWM
 //PA0 ADC INPUT
 // PWM Limits
-#define PWM_MIN 2000*0.2
-#define PWM_MAX 2000*0.7
+#define PWM_MIN (uint16_t)(2000*0.2)
+#define PWM_MAX (uint16_t)(2000*0.7)
 #define MAX_INTEGRAL 1500
 #define PWM_STEP_LIMIT 100
 // Target Output Voltage
 //#define VIN 35.0
+#define VIN_ADC 2000
 #define VOUT_TARGET 48.0
+//Voltage divider values
+#define R1 103300
+#define R2 5300
 //#define VIN 14.0
 /* USER CODE END PD */
 
@@ -72,8 +76,9 @@ double derivative = 0;
 volatile uint16_t pwm_value = 1000;
 double output_voltage = 0;
 double pid_output = 0;
+int flag = 0;
 
-volatile double measured_voltage = 5;
+volatile double measured_voltage;
 uint32_t prev_time = 0;  // Stores the last time PID ran
 /* USER CODE END PV */
 
@@ -127,6 +132,7 @@ int main(void)
   MX_ADC1_Init();
   /* USER CODE BEGIN 2 */
   HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1);
+  HAL_TIMEx_PWMN_Start(&htim1, TIM_CHANNEL_1);
   HAL_ADCEx_Calibration_Start(&hadc1, ADC_SINGLE_ENDED);
   HAL_ADC_Start_DMA(&hadc1,(uint32_t*)&value_adc,1);
   /* USER CODE END 2 */
@@ -150,17 +156,25 @@ int main(void)
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+
   HAL_Delay(1000);
   while (1)
   {
+	  measured_voltage = (value_adc*3.3/4095)*((R2+R1)/R2);
+	  if(measured_voltage >= 20){
+		  flag = 1;
+	  }
 
-	  pwm_value = pid_controller(measured_voltage);
-	  //if(pwm_value<2000)pwm_value+=10;
-	  //output_voltage = calculate_output_voltage(pwm_value);
+	  if(flag){
+		  pwm_value = pid_controller(measured_voltage);
+	  }else{
+		  pwm_value = 1000;
+	  }
+
 	  HAL_Delay(20);
-	  measured_voltage = value_adc*3.3/4096;
-	  measured_voltage = output_voltage;
 	  __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, pwm_value);
+
+	  //measured_voltage = output_voltage*(R2/(R1+R2))*4095/3.3;
 
     /* USER CODE END WHILE */
 
@@ -434,6 +448,7 @@ int pid_controller(double measured_voltage) {
     if (new_pwm > PWM_MAX) new_pwm = PWM_MAX;
 
     pwm_value = new_pwm;
+    prev_time = current_time;
     return pwm_value;
 }
 // Function to calculate expected output voltage using the converter gain
